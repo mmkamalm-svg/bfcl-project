@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bay-Fishing Master Inventory Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 p-4 md:p-8">
+
+  <!-- Header -->
+  <div class="bg-blue-900 text-white p-6 rounded-xl shadow-lg mb-6 flex flex-col md:flex-row justify-between items-center">
+    <div>
+      <h1 class="text-2xl md:text-3xl font-bold">BAY-FISHING CORPORATION LTD</h1>
+      <p class="text-blue-200 text-sm mt-1">PET BOTTLE PLANT — Master Live Inventory Dashboard</p>
+    </div>
+    <div class="mt-4 md:mt-0 flex items-center gap-3">
+      <span id="syncStatus" class="bg-yellow-500 text-white text-xs px-3 py-1 rounded-full font-semibold animate-pulse">Connecting...</span>
+      <button onclick="loadData()" class="bg-blue-700 hover:bg-blue-800 text-xs px-3 py-1.5 rounded text-white flex items-center gap-1">
+        <i class="fas fa-sync-alt"></i> Refresh Now
+      </button>
+    </div>
+  </div>
+
+  <!-- Folder / Category Selection Tabs -->
+  <div class="bg-white p-2 rounded-xl shadow mb-6 flex flex-wrap gap-2 border">
+    <button onclick="switchCategory('ALL')" id="tab-ALL" class="tab-btn px-5 py-2.5 rounded-lg text-sm font-bold transition-all bg-blue-600 text-white shadow">
+      <i class="fas fa-layer-group mr-2"></i> All Categories
+    </button>
+    <button onclick="switchCategory('LABEL')" id="tab-LABEL" class="tab-btn px-5 py-2.5 rounded-lg text-sm font-bold transition-all bg-gray-100 text-gray-700 hover:bg-gray-200">
+      <i class="fas fa-tags mr-2 text-blue-600"></i> LEBEL
+    </button>
+    <button onclick="switchCategory('CARTOON')" id="tab-CARTOON" class="tab-btn px-5 py-2.5 rounded-lg text-sm font-bold transition-all bg-gray-100 text-gray-700 hover:bg-gray-200">
+      <i class="fas fa-box mr-2 text-orange-600"></i> CARTOON STOREG
+    </button>
+    <button onclick="switchCategory('CAPSEAL')" id="tab-CAPSEAL" class="tab-btn px-5 py-2.5 rounded-lg text-sm font-bold transition-all bg-gray-100 text-gray-700 hover:bg-gray-200">
+      <i class="fas fa-wine-bottle mr-2 text-purple-600"></i> CAPSEAL
+    </button>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+    <div class="bg-white p-5 rounded-xl shadow border-l-4 border-blue-600">
+      <p class="text-gray-500 text-xs font-semibold">TOTAL RECEIVE</p>
+      <h2 id="totalReceive" class="text-2xl font-bold text-gray-800 mt-1">--</h2>
+    </div>
+    <div class="bg-white p-5 rounded-xl shadow border-l-4 border-yellow-500">
+      <p class="text-gray-500 text-xs font-semibold">TOTAL PRODUCTION</p>
+      <h2 id="totalProduction" class="text-2xl font-bold text-gray-800 mt-1">--</h2>
+    </div>
+    <div class="bg-white p-5 rounded-xl shadow border-l-4 border-red-500">
+      <p class="text-gray-500 text-xs font-semibold">TOTAL WASTED</p>
+      <h2 id="totalWasted" class="text-2xl font-bold text-gray-800 mt-1">--</h2>
+    </div>
+    <div class="bg-white p-5 rounded-xl shadow border-l-4 border-green-600">
+      <p class="text-gray-500 text-xs font-semibold">CURRENT STORE STOCK</p>
+      <h2 id="totalStore" class="text-2xl font-bold text-gray-800 mt-1">--</h2>
+    </div>
+  </div>
+
+  <!-- Chart Section -->
+  <div class="bg-white p-6 rounded-xl shadow mb-8">
+    <h3 class="text-lg font-bold text-gray-700 mb-4 flex items-center gap-2">
+      <i class="fas fa-chart-bar text-blue-600"></i> Stock Status Breakdown
+    </h3>
+    <canvas id="liveChart" height="120"></canvas>
+  </div>
+
+  <!-- Table Section -->
+  <div class="bg-white rounded-xl shadow overflow-hidden">
+    <div class="p-4 border-b bg-gray-50 font-bold text-gray-700 flex justify-between items-center">
+      <span>Item Detailed Breakdown</span>
+      <span id="activeCategoryName" class="text-xs bg-blue-100 text-blue-800 px-3 py-1 rounded-full font-bold">ALL CATEGORIES</span>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-left border-collapse">
+        <thead>
+          <tr class="bg-gray-100 text-gray-600 text-xs uppercase">
+            <th class="p-3">Category & Item</th>
+            <th class="p-3">Receive</th>
+            <th class="p-3">Production</th>
+            <th class="p-3">Wasted</th>
+            <th class="p-3">Current Store</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody" class="text-sm divide-y">
+          <!-- Dynamic Content -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxnzIpwSXdbl8SgX9TlPibt71bXk1xQ5VVgZ451KYr4rzqNf4lTwRLxXDdrUAxymEkY9w/exec"; 
+
+    let globalData = null;
+    let currentCategory = 'ALL';
+    let chartInstance = null;
+
+    async function loadData() {
+      const statusEl = document.getElementById('syncStatus');
+      statusEl.className = "bg-yellow-500 text-white text-xs px-3 py-1 rounded-full font-semibold animate-pulse";
+      statusEl.innerText = "Syncing...";
+
+      try {
+        const res = await fetch(SCRIPT_URL);
+        globalData = await res.json();
+        
+        statusEl.className = "bg-green-600 text-white text-xs px-3 py-1 rounded-full font-semibold";
+        statusEl.innerText = "Live Synced";
+
+        renderDashboard();
+      } catch (err) {
+        statusEl.className = "bg-red-600 text-white text-xs px-3 py-1 rounded-full font-semibold";
+        statusEl.innerText = "Sync Error";
+        console.error(err);
+      }
+    }
+
+    function switchCategory(category) {
+      currentCategory = category;
+
+      // Update active tab style
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.className = "tab-btn px-5 py-2.5 rounded-lg text-sm font-bold transition-all bg-gray-100 text-gray-700 hover:bg-gray-200";
+      });
+      const activeBtn = document.getElementById(`tab-${category}`);
+      if(activeBtn) {
+        activeBtn.className = "tab-btn px-5 py-2.5 rounded-lg text-sm font-bold transition-all bg-blue-600 text-white shadow";
+      }
+
+      document.getElementById('activeCategoryName').innerText = category === 'ALL' ? 'ALL CATEGORIES' : category;
+
+      renderDashboard();
+    }
+
+    function getCategoryOfSheet(sheetName) {
+      const name = sheetName.toUpperCase();
+      if (name.includes('CAPSEAL') || name.includes('CAP SEAL') || name.includes('CAPS')) return 'CAPSEAL';
+      if (name.includes('CARTOON') || name.includes('CARTON')) return 'CARTOON';
+      if (name.includes('LEBEL') || name.includes('LABEL')) return 'LABEL';
+      return 'LABEL'; // default fallback
+    }
+
+    function renderDashboard() {
+      if (!globalData) return;
+
+      let labels = [];
+      let recData = [], prodData = [], storeData = [];
+      let sumRec = 0, sumProd = 0, sumWasted = 0, sumStore = 0;
+      let tableHtml = "";
+
+      Object.keys(globalData).forEach(sheetName => {
+        const cat = getCategoryOfSheet(sheetName);
+
+        // Filter check
+        if (currentCategory !== 'ALL' && cat !== currentCategory) {
+          return;
+        }
+
+        let item = globalData[sheetName];
+
+        labels.push(sheetName);
+        recData.push(item.receive || 0);
+        prodData.push(item.production || 0);
+        storeData.push(item.store || 0);
+
+        sumRec += (item.receive || 0);
+        sumProd += (item.production || 0);
+        sumWasted += (item.wasted || 0);
+        sumStore += (item.store || 0);
+
+        let badgeColor = "bg-blue-100 text-blue-800";
+        if(cat === 'CAPSEAL') badgeColor = "bg-purple-100 text-purple-800";
+        if(cat === 'CARTOON') badgeColor = "bg-orange-100 text-orange-800";
+
+        tableHtml += `
+          <tr class="hover:bg-gray-50">
+            <td class="p-3 font-semibold">
+              <span class="text-xs px-2 py-0.5 rounded ${badgeColor} mr-2">${cat}</span>
+              ${sheetName}
+            </td>
+            <td class="p-3">${(item.receive || 0).toLocaleString()}</td>
+            <td class="p-3">${(item.production || 0).toLocaleString()}</td>
+            <td class="p-3 text-red-500">${(item.wasted || 0).toLocaleString()}</td>
+            <td class="p-3 font-bold text-green-600">${(item.store || 0).toLocaleString()}</td>
+          </tr>
+        `;
+      });
+
+      document.getElementById('totalReceive').innerText = sumRec.toLocaleString();
+      document.getElementById('totalProduction').innerText = sumProd.toLocaleString();
+      document.getElementById('totalWasted').innerText = sumWasted.toLocaleString();
+      document.getElementById('totalStore').innerText = sumStore.toLocaleString();
+      document.getElementById('tableBody').innerHTML = tableHtml || `<tr><td colspan="5" class="p-4 text-center text-gray-500">No data found for this category</td></tr>`;
+
+      // Chart Update
+      const ctx = document.getElementById('liveChart').getContext('2d');
+      if (chartInstance) chartInstance.destroy();
+
+      chartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [
+            { label: 'Received', data: recData, backgroundColor: '#3b82f6' },
+            { label: 'Production', data: prodData, backgroundColor: '#eab308' },
+            { label: 'Current Store', data: storeData, backgroundColor: '#10b981' }
+          ]
+        },
+        options: { 
+          responsive: true,
+          plugins: {
+            legend: { position: 'top' }
+          }
+        }
+      });
+    }
+
+    loadData();
+    setInterval(loadData, 30000);
+  </script>
+</body>
+</html>
